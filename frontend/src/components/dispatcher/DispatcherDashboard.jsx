@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../services/api";
+import { useWebSocket } from "../../context/WebSocketContext";
 import { LiveMap } from "../common/LiveMap";
 import { 
   Radio, 
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 
 export const DispatcherDashboard = () => {
+  const { lastMessage, isConnected } = useWebSocket();
   const [emergencies, setEmergencies] = useState([]);
   const [ambulances, setAmbulances] = useState([]);
   const [hospitals, setHospitals] = useState([]);
@@ -44,6 +46,63 @@ export const DispatcherDashboard = () => {
   useEffect(() => {
     fetchControlCenterData();
   }, []);
+
+  // Listen to real-time WebSocket events
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    // 1. Live Ambulance GPS Telemetry update
+    if (lastMessage.type === "AMBULANCE_LOCATION_UPDATED") {
+      setAmbulances(prev => prev.map(amb => amb.id === lastMessage.ambulance_id ? {
+        ...amb,
+        latitude: lastMessage.latitude,
+        longitude: lastMessage.longitude,
+        status: lastMessage.status || amb.status
+      } : amb));
+    }
+
+    // 2. New Emergency SOS created
+    else if (lastMessage.type === "EMERGENCY_CREATED") {
+      fetchControlCenterData();
+    }
+
+    // 3. Emergency Status Updated
+    else if (lastMessage.type === "EMERGENCY_STATUS_UPDATED" || lastMessage.type === "DISPATCH_OVERRIDE_EXECUTED") {
+      setEmergencies(prev => prev.map(e => e.id === lastMessage.emergency_id ? {
+        ...e,
+        status: lastMessage.new_status,
+        assigned_ambulance_id: lastMessage.assigned_ambulance_id || e.assigned_ambulance_id,
+        target_hospital_id: lastMessage.target_hospital_id || e.target_hospital_id
+      } : e));
+
+      if (selectedEmergency?.id === lastMessage.emergency_id) {
+        setSelectedEmergency(prev => prev ? {
+          ...prev,
+          status: lastMessage.new_status,
+          assigned_ambulance_id: lastMessage.assigned_ambulance_id || prev.assigned_ambulance_id,
+          target_hospital_id: lastMessage.target_hospital_id || prev.target_hospital_id
+        } : prev);
+      }
+    }
+
+    // 4. Ambulance Status Changed
+    else if (lastMessage.type === "AMBULANCE_STATUS_CHANGED") {
+      setAmbulances(prev => prev.map(amb => amb.id === lastMessage.ambulance_id ? {
+        ...amb,
+        status: lastMessage.status
+      } : amb));
+    }
+
+    // 5. Hospital Capacity Updated
+    else if (lastMessage.type === "HOSPITAL_CAPACITY_UPDATED") {
+      setHospitals(prev => prev.map(h => h.id === lastMessage.hospital_id ? {
+        ...h,
+        available_er_beds: lastMessage.available_er_beds,
+        available_icu_beds: lastMessage.available_icu_beds,
+        er_status: lastMessage.er_status
+      } : h));
+    }
+  }, [lastMessage, selectedEmergency]);
 
   const fetchControlCenterData = async () => {
     setLoading(true);
@@ -235,15 +294,24 @@ export const DispatcherDashboard = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold text-white uppercase ${
-                        e.priority === "CRITICAL" ? "bg-rose-600 animate-pulse" :
-                        e.priority === "HIGH" ? "bg-orange-600" :
-                        e.priority === "MEDIUM" ? "bg-amber-600" : "bg-emerald-600"
-                      }`}>
-                        {e.priority || "PENDING"}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold text-white uppercase ${
+                          e.priority === "CRITICAL" ? "bg-rose-600 animate-pulse" :
+                          e.priority === "HIGH" ? "bg-orange-600" :
+                          e.priority === "MEDIUM" ? "bg-amber-600" : "bg-emerald-600"
+                        }`}>
+                          {e.priority || "PENDING"}
+                        </span>
+                        {e.is_guest && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            QUICK SOS
+                          </span>
+                        )}
+                      </div>
 
-                      <span className="text-[10px] text-slate-400 font-mono">#{e.id}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {e.client_generated_id ? e.client_generated_id : `#${e.id}`}
+                      </span>
                     </div>
 
                     <div className="text-sm font-bold text-white leading-snug">{e.emergency_type} - {e.caller_name}</div>
@@ -251,6 +319,9 @@ export const DispatcherDashboard = () => {
 
                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-900">
                       <span>Status: <strong className="text-slate-200 uppercase">{e.status}</strong></span>
+                      {e.accuracy && (
+                        <span className="text-[10px] text-emerald-400 font-mono">±{e.accuracy}m</span>
+                      )}
                       {e.is_dispatcher_override && (
                         <span className="text-amber-400 font-bold">Overridden</span>
                       )}
@@ -284,15 +355,37 @@ export const DispatcherDashboard = () => {
               {/* Selected Emergency Summary */}
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-400">Emergency #{selectedEmergency.id} Triage</div>
+                  <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                    <span>{selectedEmergency.client_generated_id || `Emergency #${selectedEmergency.id}`}</span>
+                    {selectedEmergency.is_guest && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        GUEST SOS
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-rose-400 font-bold">Severity: {selectedEmergency.ai_severity_score}/100</span>
                 </div>
                 <div className="text-sm font-extrabold text-white">{selectedEmergency.emergency_type} ({selectedEmergency.patient_count} Patient)</div>
                 <p className="text-xs text-slate-300">{selectedEmergency.ai_urgency_reason}</p>
 
-                <div className="pt-2 border-t border-slate-900 flex flex-wrap gap-1 text-[11px]">
-                  <span className="text-slate-400">Recommended Vehicle:</span>
-                  <span className="text-blue-400 font-bold">{selectedEmergency.ai_recommended_type}</span>
+                <div className="pt-2 border-t border-slate-900 flex flex-col gap-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Location:</span>
+                    <span className="text-slate-200 font-medium truncate max-w-[220px]">
+                      {selectedEmergency.address}
+                      {selectedEmergency.accuracy && ` (±${selectedEmergency.accuracy}m)`}
+                    </span>
+                  </div>
+                  {selectedEmergency.caller_phone && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Caller Phone:</span>
+                      <span className="text-slate-200 font-mono">{selectedEmergency.caller_phone}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Recommended Vehicle:</span>
+                    <span className="text-blue-400 font-bold">{selectedEmergency.ai_recommended_type}</span>
+                  </div>
                 </div>
               </div>
 

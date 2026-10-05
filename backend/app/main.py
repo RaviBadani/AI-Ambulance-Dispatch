@@ -13,8 +13,32 @@ from app.api.v1.dispatch import router as dispatch_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.websockets import router as websockets_router
 
+from sqlalchemy import text
+
 # Create DB tables
 Base.metadata.create_all(bind=engine)
+
+# Run safe lightweight column migrations for existing SQLite databases
+def run_sqlite_migrations():
+    with engine.connect() as conn:
+        try:
+            res = conn.execute(text("PRAGMA table_info(emergencies)"))
+            existing_cols = [row[1] for row in res.fetchall()]
+            if existing_cols:
+                if "client_generated_id" not in existing_cols:
+                    conn.execute(text("ALTER TABLE emergencies ADD COLUMN client_generated_id VARCHAR"))
+                if "is_guest" not in existing_cols:
+                    conn.execute(text("ALTER TABLE emergencies ADD COLUMN is_guest BOOLEAN DEFAULT 0"))
+                if "accuracy" not in existing_cols:
+                    conn.execute(text("ALTER TABLE emergencies ADD COLUMN accuracy FLOAT"))
+                conn.commit()
+        except Exception as e:
+            print(f"Migration note: {e}")
+
+try:
+    run_sqlite_migrations()
+except Exception as e:
+    print(f"Error checking DB migrations: {e}")
 
 # Auto seed data on application start
 try:
@@ -56,6 +80,7 @@ def root():
     }
 
 @app.get("/health")
+@app.get(f"{settings.API_V1_STR}/health")
 def health():
     return {
         "status": "healthy",

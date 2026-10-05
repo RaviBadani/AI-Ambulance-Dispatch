@@ -14,7 +14,8 @@ router = APIRouter()
 @router.get("/", response_model=List[AmbulanceResponse])
 def get_ambulances(
     status_filter: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["DISPATCHER", "DRIVER", "HOSPITAL", "CALLER"]))
 ):
     query = db.query(Ambulance)
     if status_filter:
@@ -22,7 +23,11 @@ def get_ambulances(
     return query.all()
 
 @router.get("/{ambulance_id}", response_model=AmbulanceResponse)
-def get_ambulance(ambulance_id: int, db: Session = Depends(get_db)):
+def get_ambulance(
+    ambulance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["DISPATCHER", "DRIVER", "HOSPITAL", "CALLER"]))
+):
     amb = db.query(Ambulance).filter(Ambulance.id == ambulance_id).first()
     if not amb:
         raise HTTPException(status_code=404, detail="Ambulance not found")
@@ -39,9 +44,23 @@ async def update_ambulance_location(
     if not amb:
         raise HTTPException(status_code=404, detail="Ambulance not found")
 
+    # RBAC: Drivers can only update their own assigned ambulance
+    if current_user.role == "DRIVER":
+        if amb.driver_user_id and amb.driver_user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Driver '{current_user.full_name}' is not authorized to update Ambulance {amb.callsign}."
+            )
+        elif not amb.driver_user_id:
+            amb.driver_user_id = current_user.id
+
+    if not (-90.0 <= location.latitude <= 90.0 and -180.0 <= location.longitude <= 180.0):
+        raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90, longitude between -180 and 180.")
+
+    now = datetime.now(timezone.utc)
     amb.latitude = location.latitude
     amb.longitude = location.longitude
-    amb.last_updated = datetime.now(timezone.utc)
+    amb.last_updated = now
     db.commit()
     db.refresh(amb)
 
@@ -51,10 +70,12 @@ async def update_ambulance_location(
         "callsign": amb.callsign,
         "latitude": amb.latitude,
         "longitude": amb.longitude,
-        "status": amb.status
+        "status": amb.status,
+        "timestamp": now.isoformat()
     })
 
     return amb
+
 
 @router.patch("/{ambulance_id}/status", response_model=AmbulanceResponse)
 async def update_ambulance_status(

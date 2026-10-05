@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="theme-color" content="#e11d48" />
+    <meta name="description" content="RESPONSAI - AI-Driven Emergency Ambulance Dispatch & Operational Coordination Platform" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>RESPONSAI - AI Emergency Dispatch & Coordination</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(
+            (reg) => console.log('[ServiceWorker] Registered with scope:', reg.scope),
+            (err) => console.warn('[ServiceWorker] Registration failed:', err)
+          );
+        });
+      }
+    </script>
   </body>
 </html>

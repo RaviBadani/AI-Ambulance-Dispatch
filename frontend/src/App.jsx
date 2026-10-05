@@ -9,6 +9,7 @@ import { RoleRoute } from "./routes/RoleRoute";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { UnauthorizedPage } from "./pages/auth/UnauthorizedPage";
+import { QuickSOS } from "./pages/guest/QuickSOS";
 
 // Layouts
 import { CallerLayout } from "./components/layouts/CallerLayout";
@@ -80,7 +81,9 @@ export default function App() {
       <WebSocketProvider>
         <BrowserRouter>
           <Routes>
-            {/* Public Auth Routes */}
+            {/* Public Auth & Emergency SOS Routes */}
+            <Route path="/sos" element={<QuickSOS />} />
+            <Route path="/quick-sos" element={<QuickSOS />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />

@@ -12,11 +12,18 @@ from app.core.websocket_manager import ws_manager
 router = APIRouter()
 
 @router.get("/", response_model=List[HospitalResponse])
-def get_hospitals(db: Session = Depends(get_db)):
+def get_hospitals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["DISPATCHER", "DRIVER", "HOSPITAL", "CALLER"]))
+):
     return db.query(Hospital).all()
 
 @router.get("/{hospital_id}", response_model=HospitalResponse)
-def get_hospital(hospital_id: int, db: Session = Depends(get_db)):
+def get_hospital(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["DISPATCHER", "DRIVER", "HOSPITAL", "CALLER"]))
+):
     hosp = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hosp:
         raise HTTPException(status_code=404, detail="Hospital not found")

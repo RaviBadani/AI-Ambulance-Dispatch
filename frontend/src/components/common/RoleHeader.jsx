@@ -18,7 +18,7 @@ import {
 
 export const RoleHeader = ({ roleTitle, roleBadgeColor = "text-rose-400 bg-rose-500/10 border-rose-500/30" }) => {
   const { user, logout } = useAuth();
-  const { isConnected, notifications, clearNotifications } = useWebSocket();
+  const { isConnected, connectionStatus, notifications, clearNotifications } = useWebSocket();
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -84,13 +84,29 @@ export const RoleHeader = ({ roleTitle, roleBadgeColor = "text-rose-400 bg-rose-
           <div className="flex items-center space-x-3">
             
             {/* Live Socket Status */}
-            <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-              isConnected 
-                ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-400" 
-                : "bg-amber-950/60 border-amber-500/30 text-amber-400"
+            <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+              connectionStatus === "connected"
+                ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]" 
+                : connectionStatus === "reconnecting"
+                ? "bg-amber-950/60 border-amber-500/40 text-amber-400 animate-pulse"
+                : "bg-rose-950/60 border-rose-500/40 text-rose-400"
             }`}>
-              {isConnected ? <Wifi className="w-3.5 h-3.5 animate-pulse" /> : <WifiOff className="w-3.5 h-3.5" />}
-              <span className="hidden md:inline">{isConnected ? "Live Sync Active" : "Reconnecting..."}</span>
+              {connectionStatus === "connected" ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                  <span className="hidden sm:inline">🟢 Live Connection</span>
+                </>
+              ) : connectionStatus === "reconnecting" ? (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 animate-bounce" />
+                  <span className="hidden sm:inline">🟡 Reconnecting...</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">🔴 Disconnected</span>
+                </>
+              )}
             </div>
 
             {/* Notification Drawer Button */}

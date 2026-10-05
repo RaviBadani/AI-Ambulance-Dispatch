@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../../services/api";
+import { useWebSocket } from "../../context/WebSocketContext";
 import { LiveMap } from "../common/LiveMap";
 import { 
   Truck, 
@@ -14,16 +15,32 @@ import {
   Clock, 
   ShieldAlert,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Wifi,
+  Compass,
+  X
 } from "lucide-react";
 
 export const DriverDashboard = () => {
+  const { lastMessage, sendMessage, isConnected } = useWebSocket();
   const [allAmbulances, setAllAmbulances] = useState([]);
   const [driverAmbulance, setDriverAmbulance] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
   const [hospitals, setHospitals] = useState([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Real Web GPS states
+  const [isLiveGpsActive, setIsLiveGpsActive] = useState(false);
+  const [liveGpsData, setLiveGpsData] = useState({
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    lastUpdated: null,
+  });
+  const [gpsError, setGpsError] = useState(null);
+  const watchIdRef = useRef(null);
 
   useEffect(() => {
     fetchDriverState();
@@ -65,6 +82,150 @@ export const DriverDashboard = () => {
     }
   };
 
+  // Real-time WebSocket event listener
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    if (lastMessage.type === "EMERGENCY_STATUS_UPDATED" || lastMessage.type === "DISPATCH_OVERRIDE_EXECUTED") {
+      const targetAmbId = lastMessage.assigned_ambulance_id;
+      if (driverAmbulance && targetAmbId === driverAmbulance.id) {
+        if (lastMessage.new_status === "RESOLVED") {
+          setActiveJob(null);
+          setIsSimulating(false);
+          stopLiveGps();
+        } else {
+          setActiveJob(prev => {
+            if (prev && prev.id === lastMessage.emergency_id) {
+              return { ...prev, status: lastMessage.new_status, target_hospital_id: lastMessage.target_hospital_id };
+            }
+            return prev;
+          });
+        }
+        fetchDriverState(driverAmbulance.id);
+      }
+    }
+
+    if (lastMessage.type === "EMERGENCY_CREATED") {
+      // Re-fetch in case assigned automatically
+      if (driverAmbulance && !activeJob) {
+        fetchDriverState(driverAmbulance.id);
+      }
+    }
+
+    if (lastMessage.type === "AMBULANCE_LOCATION_UPDATED") {
+      if (driverAmbulance && lastMessage.ambulance_id === driverAmbulance.id) {
+        setDriverAmbulance(prev => prev ? {
+          ...prev,
+          latitude: lastMessage.latitude,
+          longitude: lastMessage.longitude
+        } : prev);
+      }
+    }
+  }, [lastMessage, driverAmbulance, activeJob]);
+
+  // Clean up GPS watch on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, []);
+
+  // START / STOP Real Web GPS
+  const startLiveGps = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      setGpsError("Browser does not support the Geolocation API.");
+      return;
+    }
+
+    // Stop demo simulation when real GPS starts
+    setIsSimulating(false);
+    setGpsError(null);
+
+    try {
+      const id = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lng = Number(pos.coords.longitude.toFixed(6));
+          const acc = Math.round(pos.coords.accuracy);
+          const timeStr = new Date().toLocaleTimeString();
+
+          setLiveGpsData({
+            latitude: lat,
+            longitude: lng,
+            accuracy: acc,
+            lastUpdated: timeStr,
+          });
+          setGpsError(null);
+          setIsLiveGpsActive(true);
+
+          // Update local ambulance coordinates
+          if (driverAmbulance) {
+            setDriverAmbulance(prev => prev ? { ...prev, latitude: lat, longitude: lng } : prev);
+            setAllAmbulances(prev => prev.map(a => a.id === driverAmbulance.id ? { ...a, latitude: lat, longitude: lng } : a));
+
+            // Transmit through WebSocket to central dispatch and caller
+            sendMessage({
+              type: "location_update",
+              emergency_id: activeJob?.id || null,
+              ambulance_id: driverAmbulance.id,
+              latitude: lat,
+              longitude: lng,
+              accuracy: acc,
+              timestamp: new Date().toISOString()
+            });
+          }
+        },
+        (err) => {
+          console.warn("Geolocation watchPosition error:", err);
+          let errMsg = "An unknown GPS error occurred.";
+          switch (err.code) {
+            case 1: // PERMISSION_DENIED
+              errMsg = "GPS permission denied. Please allow location access in your browser address bar.";
+              break;
+            case 2: // POSITION_UNAVAILABLE
+              errMsg = "Device position unavailable. Please ensure location services are enabled.";
+              break;
+            case 3: // TIMEOUT
+              errMsg = "GPS location request timed out. Retrying signal acquisition...";
+              break;
+            default:
+              errMsg = err.message || errMsg;
+          }
+          setGpsError(errMsg);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0
+        }
+      );
+      watchIdRef.current = id;
+      setIsLiveGpsActive(true);
+    } catch (e) {
+      console.error("Error starting GPS watch", e);
+      setGpsError(e.message || "Failed to start GPS tracking.");
+    }
+  }, [driverAmbulance, activeJob, sendMessage]);
+
+  const stopLiveGps = useCallback(() => {
+    if (watchIdRef.current !== null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsLiveGpsActive(false);
+  }, []);
+
+  const toggleLiveGps = () => {
+    if (isLiveGpsActive) {
+      stopLiveGps();
+    } else {
+      startLiveGps();
+    }
+  };
+
   const handleSelectAmbulance = (ambId) => {
     fetchDriverState(ambId);
   };
@@ -81,21 +242,21 @@ export const DriverDashboard = () => {
       if (nextStatus === "RESOLVED") {
         setActiveJob(null);
         setIsSimulating(false);
+        stopLiveGps();
       } else {
         setActiveJob(updated);
       }
-      fetchDriverState();
+      fetchDriverState(driverAmbulance.id);
     } catch (err) {
       alert(`Status update failed: ${err.message}`);
     }
   };
 
-  // Simulated GPS Movement Interval
+  // Simulated GPS Movement Interval (clearly isolated from Real GPS)
   useEffect(() => {
     let interval = null;
-    if (isSimulating && activeJob && driverAmbulance) {
+    if (isSimulating && activeJob && driverAmbulance && !isLiveGpsActive) {
       interval = setInterval(async () => {
-        // Target destination depends on emergency status
         let targetLat = activeJob.latitude;
         let targetLon = activeJob.longitude;
 
@@ -107,7 +268,6 @@ export const DriverDashboard = () => {
           }
         }
 
-        // Interpolate small step (0.001 deg ~ 100m)
         const dLat = targetLat - driverAmbulance.latitude;
         const dLon = targetLon - driverAmbulance.longitude;
 
@@ -116,15 +276,30 @@ export const DriverDashboard = () => {
           return;
         }
 
-        const newLat = driverAmbulance.latitude + (dLat * 0.15);
-        const newLon = driverAmbulance.longitude + (dLon * 0.15);
+        const newLat = Number((driverAmbulance.latitude + (dLat * 0.15)).toFixed(6));
+        const newLon = Number((driverAmbulance.longitude + (dLon * 0.15)).toFixed(6));
 
         try {
-          const updatedAmb = await api.updateAmbulanceLocation(driverAmbulance.id, {
+          // Update via WebSocket if connected, otherwise via HTTP API
+          const sent = sendMessage({
+            type: "location_update",
+            emergency_id: activeJob.id,
+            ambulance_id: driverAmbulance.id,
             latitude: newLat,
-            longitude: newLon
+            longitude: newLon,
+            accuracy: 15,
+            timestamp: new Date().toISOString()
           });
-          setDriverAmbulance(updatedAmb);
+
+          if (!sent) {
+            await api.updateAmbulanceLocation(driverAmbulance.id, {
+              latitude: newLat,
+              longitude: newLon
+            });
+          }
+
+          setDriverAmbulance(prev => prev ? { ...prev, latitude: newLat, longitude: newLon } : prev);
+          setAllAmbulances(prev => prev.map(a => a.id === driverAmbulance.id ? { ...a, latitude: newLat, longitude: newLon } : a));
         } catch (e) {
           console.error("GPS simulation error", e);
         }
@@ -135,7 +310,8 @@ export const DriverDashboard = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isSimulating, activeJob, driverAmbulance, hospitals]);
+  }, [isSimulating, activeJob, driverAmbulance, hospitals, isLiveGpsActive, sendMessage]);
+
 
   const targetHospital = hospitals.find(h => h.id === activeJob?.target_hospital_id);
 
@@ -159,8 +335,8 @@ export const DriverDashboard = () => {
           </div>
         </div>
 
-        {/* Active Vehicle Switcher & GPS Simulator Button */}
-        <div className="flex items-center space-x-3">
+        {/* Active Vehicle Switcher & Controls */}
+        <div className="flex flex-wrap items-center gap-3">
           {allAmbulances.length > 0 && (
             <select
               value={driverAmbulance?.id || ""}
@@ -173,19 +349,117 @@ export const DriverDashboard = () => {
             </select>
           )}
 
+          {/* REAL GPS CONTROL BUTTON */}
+          <button
+            type="button"
+            onClick={toggleLiveGps}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer shadow-lg ${
+              isLiveGpsActive
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-900/40 animate-pulse"
+                : "bg-slate-800 hover:bg-slate-700 text-emerald-400 border-emerald-500/40"
+            }`}
+          >
+            <Compass className={`w-4 h-4 ${isLiveGpsActive ? "animate-spin" : ""}`} />
+            <span>{isLiveGpsActive ? "Live GPS: Active (Stop)" : "Enable Live Location"}</span>
+          </button>
+
+          {/* SIMULATION BUTTON (Isolated from Real GPS) */}
           {activeJob && (
             <button
+              type="button"
+              disabled={isLiveGpsActive}
               onClick={() => setIsSimulating(!isSimulating)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold border transition ${
-                isSimulating
-                  ? "bg-amber-600 text-white border-amber-500 shadow-lg animate-pulse"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${
+                isLiveGpsActive
+                  ? "opacity-40 cursor-not-allowed bg-slate-900 text-slate-500 border-slate-800"
+                  : isSimulating
+                  ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500 shadow-lg animate-pulse"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer"
               }`}
+              title={isLiveGpsActive ? "Disable Real GPS to use Simulation Mode" : ""}
             >
               {isSimulating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              <span>{isSimulating ? "Pause GPS Simulation" : "Simulate GPS Route Movement"}</span>
+              <span>{isSimulating ? "Pause Simulation" : "Simulate Route"}</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* GPS Error Alert Banner */}
+      {gpsError && (
+        <div className="bg-rose-950/80 border border-rose-500/50 rounded-2xl p-4 flex items-center justify-between text-xs text-rose-200 shadow-lg">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            <div>
+              <span className="font-bold text-white block">GPS Sensor Alert</span>
+              <span>{gpsError}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGpsError(null)}
+            className="p-1 hover:bg-rose-900/60 rounded-lg text-rose-300 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Real-Time Telemetry HUD & Mode Indicator */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Active Mode Badge */}
+          {isLiveGpsActive ? (
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full font-black flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+              LIVE GPS ACTIVE (DEVICE SENSOR)
+            </span>
+          ) : isSimulating ? (
+            <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full font-black flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+              DEMO SIMULATION (SYNTHETIC ROUTE)
+            </span>
+          ) : (
+            <span className="px-3 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded-full font-semibold">
+              GPS STANDBY
+            </span>
+          )}
+
+          <span className="text-slate-500">|</span>
+          <span className="text-slate-400 font-mono">
+            Unit: <strong className="text-white">{driverAmbulance?.callsign}</strong>
+          </span>
+        </div>
+
+        {/* Live GPS Coordinates and Accuracy */}
+        <div className="flex flex-wrap items-center gap-4 text-slate-300">
+          <div>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold">Latitude</span>
+            <span className="font-mono font-bold text-white">
+              {driverAmbulance?.latitude != null ? driverAmbulance.latitude.toFixed(5) : "—"}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold">Longitude</span>
+            <span className="font-mono font-bold text-white">
+              {driverAmbulance?.longitude != null ? driverAmbulance.longitude.toFixed(5) : "—"}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold">Accuracy</span>
+            <span className="font-mono font-bold text-emerald-400">
+              {liveGpsData.accuracy ? `±${liveGpsData.accuracy}m` : "±10m"}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold">Last Updated</span>
+            <span className="font-mono text-slate-300">
+              {liveGpsData.lastUpdated || "Live"}
+            </span>
+          </div>
         </div>
       </div>
 

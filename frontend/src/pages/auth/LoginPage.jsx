@@ -81,14 +81,46 @@ export const LoginPage = () => {
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md space-y-4">
+        {/* PUBLIC EMERGENCY QUICK SOS HERO BUTTON */}
+        <div className="bg-gradient-to-r from-rose-950/90 via-red-950/80 to-slate-900 border-2 border-rose-500/60 rounded-3xl p-5 shadow-2xl shadow-rose-950/50 text-center space-y-3">
+          <div className="flex items-center justify-center gap-2 text-rose-300 font-black text-xs uppercase tracking-wider">
+            <Siren className="w-4 h-4 text-rose-400 animate-bounce" />
+            <span>Immediate Emergency Assistance</span>
+          </div>
+          <p className="text-xs text-slate-300">
+            Need an ambulance immediately? No registration or password required.
+          </p>
+          <Link
+            to="/sos"
+            className="w-full py-4 px-6 bg-gradient-to-r from-rose-600 via-red-600 to-rose-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm sm:text-base rounded-2xl shadow-xl flex items-center justify-center gap-2.5 transition transform active:scale-[0.98] border border-rose-400/50 cursor-pointer"
+          >
+            <Siren className="w-5 h-5 animate-pulse" />
+            <span>🚨 SEND EMERGENCY SOS</span>
+          </Link>
+          <div className="flex items-center justify-center gap-3 text-[11px] font-semibold text-slate-400 pt-0.5">
+            <span>Instant GPS</span>
+            <span>•</span>
+            <span>Offline-First Queue</span>
+            <span>•</span>
+            <span>Zero Sign-In</span>
+          </div>
+        </div>
+
         <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 backdrop-blur-xl shadow-2xl space-y-6">
-          
           <div className="border-b border-slate-800 pb-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <KeyRound className="w-4 h-4 text-rose-500" />
-              <span>JWT Role-Based Authentication</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <KeyRound className="w-4 h-4 text-rose-500" />
+                <span>Account Login</span>
+              </h3>
+              <Link
+                to="/register"
+                className="text-xs font-bold text-rose-400 hover:text-rose-300 transition"
+              >
+                Create Account →
+              </Link>
+            </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Sign in to enter your assigned emergency dashboard
             </p>

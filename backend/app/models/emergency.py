@@ -6,6 +6,9 @@ class Emergency(Base):
     __tablename__ = "emergencies"
 
     id = Column(Integer, primary_key=True, index=True)
+    client_generated_id = Column(String, unique=True, index=True, nullable=True) # e.g. SOS-20261005-A7F29
+    is_guest = Column(Boolean, default=False)
+    accuracy = Column(Float, nullable=True) # GPS accuracy in meters
     caller_name = Column(String, nullable=False)
     caller_phone = Column(String, nullable=False)
     address = Column(String, nullable=False)

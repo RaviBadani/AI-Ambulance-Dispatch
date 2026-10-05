@@ -1,0 +1,16 @@
+{
+  "name": "RESPONSAI Emergency Dispatch",
+  "short_name": "RESPONSAI",
+  "description": "AI-Driven Emergency Ambulance Dispatch & Operational Coordination Platform",
+  "start_url": "/sos",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#e11d48",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

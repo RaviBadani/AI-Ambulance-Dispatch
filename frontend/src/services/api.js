@@ -38,6 +38,8 @@ export const api = {
 
   // Emergencies
   createEmergency: (data) => fetchApi("/emergencies/", { method: "POST", body: JSON.stringify(data) }),
+  createGuestEmergency: (data) => fetchApi("/emergencies/guest", { method: "POST", body: JSON.stringify(data) }),
+  getGuestEmergency: (clientGeneratedId) => fetchApi(`/emergencies/guest/${clientGeneratedId}`),
   getEmergencies: (status) => fetchApi(`/emergencies/${status ? `?status_filter=${status}` : ""}`),
   getEmergencyDetail: (id) => fetchApi(`/emergencies/${id}`),
   updateEmergencyStatus: (id, statusData) => fetchApi(`/emergencies/${id}/status`, { method: "PATCH", body: JSON.stringify(statusData) }),
