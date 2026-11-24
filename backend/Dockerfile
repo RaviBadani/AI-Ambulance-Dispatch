@@ -21,7 +21,7 @@ RUN useradd -m -u 1000 appuser && \
 
 # Copy and install python dependencies
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --prefer-binary --default-timeout=100 -r requirements.txt
 
 # Copy application source code
 COPY . /app/

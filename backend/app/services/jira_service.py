@@ -1,39 +1,14 @@
 import logging
+import requests
 from typing import Optional, List
 from app.core.config import settings
 
 logger = logging.getLogger("jira_service")
 
 class JiraService:
-    def __init__(self):
-        self._client = None
-        self._initialized = False
-
-    def _get_client(self):
-        if not settings.JIRA_ENABLED:
-            return None
-        
-        if self._initialized:
-            return self._client
-
-        if not (settings.JIRA_SERVER and settings.JIRA_EMAIL and settings.JIRA_API_TOKEN):
-            logger.warning("Jira integration is enabled but credentials (SERVER, EMAIL, or API_TOKEN) are missing.")
-            self._initialized = True
-            return None
-
-        try:
-            from jira import JIRA
-            self._client = JIRA(
-                server=settings.JIRA_SERVER,
-                basic_auth=(settings.JIRA_EMAIL, settings.JIRA_API_TOKEN)
-            )
-            self._initialized = True
-            logger.info(f"Successfully connected to Jira instance: {settings.JIRA_SERVER}")
-            return self._client
-        except Exception as e:
-            logger.error(f"Failed to initialize Jira client: {e}")
-            self._initialized = True
-            return None
+    @property
+    def is_configured(self) -> bool:
+        return bool(settings.JIRA_ENABLED and settings.JIRA_SERVER and settings.JIRA_EMAIL and settings.JIRA_API_TOKEN)
 
     def create_incident_ticket(
         self,
@@ -44,42 +19,59 @@ class JiraService:
         labels: Optional[List[str]] = None
     ) -> Optional[str]:
         """
-        Creates an incident ticket in Jira. Returns the created issue key (e.g. 'AMB-42') or None.
+        Creates an incident ticket in Jira using standard Atlassian REST API.
         """
-        client = self._get_client()
-        if not client:
+        if not self.is_configured:
             logger.info(f"[JIRA MOCK/DISABLED] Would have created ticket: {summary}")
             return None
 
-        try:
-            issue_dict = {
+        server = settings.JIRA_SERVER.rstrip("/")
+        url = f"{server}/rest/api/2/issue"
+        auth = (settings.JIRA_EMAIL, settings.JIRA_API_TOKEN)
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+        payload = {
+            "fields": {
                 "project": {"key": settings.JIRA_PROJECT_KEY},
                 "summary": summary,
                 "description": description,
                 "issuetype": {"name": issue_type},
                 "labels": labels or ["ambulance-dispatch", "automated-alert"]
             }
-            new_issue = client.create_issue(fields=issue_dict)
-            logger.info(f"Jira issue created successfully: {new_issue.key}")
-            return new_issue.key
+        }
+
+        try:
+            resp = requests.post(url, json=payload, auth=auth, headers=headers, timeout=10)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                issue_key = data.get("key")
+                logger.info(f"Jira issue created successfully: {issue_key}")
+                return issue_key
+            else:
+                logger.error(f"Jira API error ({resp.status_code}): {resp.text}")
+                return None
         except Exception as e:
-            logger.error(f"Error creating Jira incident: {e}")
+            logger.error(f"Failed to call Jira REST API: {e}")
             return None
 
     def add_comment(self, issue_key: str, comment: str) -> bool:
         """
-        Appends a comment to an existing Jira issue.
+        Adds a comment to an existing Jira issue.
         """
-        client = self._get_client()
-        if not client:
+        if not self.is_configured:
             return False
 
+        server = settings.JIRA_SERVER.rstrip("/")
+        url = f"{server}/rest/api/2/issue/{issue_key}/comment"
+        auth = (settings.JIRA_EMAIL, settings.JIRA_API_TOKEN)
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+        payload = {"body": comment}
         try:
-            client.add_comment(issue_key, comment)
-            return True
+            resp = requests.post(url, json=payload, auth=auth, headers=headers, timeout=10)
+            return resp.status_code in (200, 201)
         except Exception as e:
-            logger.error(f"Failed to add comment to Jira issue {issue_key}: {e}")
+            logger.error(f"Failed to post comment to Jira issue {issue_key}: {e}")
             return False
 
 jira_service = JiraService()
-
