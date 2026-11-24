@@ -14,7 +14,7 @@ pipeline {
         BACKEND_IMAGE   = 'ai-ambulance-dispatch-backend:latest'
         FRONTEND_IMAGE  = 'ai-ambulance-dispatch-frontend:latest'
         BACKEND_PORT    = '8000'
-        FRONTEND_PORT   = '80'
+        FRONTEND_PORT   = '3000'
         JIRA_SITE_NAME  = 'jira-cloud' // Configured under Manage Jenkins -> Jira Software Cloud
     }
 
