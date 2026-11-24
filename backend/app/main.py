@@ -12,6 +12,7 @@ from app.api.v1.hospitals import router as hospitals_router
 from app.api.v1.dispatch import router as dispatch_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.websockets import router as websockets_router
+from app.api.v1.integrations import router as integrations_router
 
 from sqlalchemy import text
 
@@ -68,6 +69,7 @@ app.include_router(ambulances_router, prefix=f"{settings.API_V1_STR}/ambulances"
 app.include_router(hospitals_router, prefix=f"{settings.API_V1_STR}/hospitals", tags=["Hospitals"])
 app.include_router(dispatch_router, prefix=f"{settings.API_V1_STR}/dispatch", tags=["AI Dispatch Support"])
 app.include_router(analytics_router, prefix=f"{settings.API_V1_STR}/analytics", tags=["Analytics"])
+app.include_router(integrations_router, prefix=f"{settings.API_V1_STR}/integrations", tags=["Integrations"])
 app.include_router(websockets_router, tags=["WebSockets"])
 
 @app.get("/")

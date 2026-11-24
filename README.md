@@ -30,11 +30,18 @@ npm run dev
 ```
 Open `http://localhost:3000` in your browser.
 
-## CI/CD Pipeline (Jenkins)
+## CI/CD Pipeline (Jenkins) & Jira Integration
 
-The project includes an automated declarative [`Jenkinsfile`](file:///c:/UBA4851-Slot%20A/data/Desktop/AI-Ambulance-Dispatch/Jenkinsfile) pipeline that executes on every commit:
-- **Checkout**: Pulls the latest code from `main`.
-- **Build Backend**: Builds container `ai-ambulance-dispatch-backend:latest`.
-- **Build Frontend**: Builds production bundle and Nginx image `ai-ambulance-dispatch-frontend:latest`.
-- **Deploy**: Orchestrates containers on `ambulance-network` on ports `8000` (FastAPI) and `3000` (React/Nginx).
+The project includes an enterprise automated declarative [`Jenkinsfile`](./Jenkinsfile) pipeline supporting multi-branch execution and Jira automation:
+- **Dynamic SCM Checkout**: Dynamically fetches the active repository and branch.
+- **Pre-Build Validation & Linting**: Validates backend dependencies and builds the frontend bundle before image creation.
+- **Parallel Docker Builds**: Concurrently builds `ai-ambulance-dispatch-backend:latest` and `ai-ambulance-dispatch-frontend:latest`.
+- **Zero-Downtime Deployment**: Recreates containers within the isolated `ambulance-network` bridge and mounts persistent volumes (`backend_data`).
+- **Health Check Verification**: Verifies FastAPI `/health` and Nginx HTTP responses.
+- **Jira Automation**: Links build status and auto-comments deployment notifications directly to Jira tickets (e.g. `AMB-101`).
 
+### Jira Integration Features
+- **In-App Incident Reporter**: The backend automatically provides Jira issue creation via `backend/app/services/jira_service.py`.
+- **API Status & Testing**: Inspect status or test creation at `/api/v1/integrations/jira/status`.
+- **Environment Template**: See `backend/.env.example` for configuring `JIRA_SERVER`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
+- **DevOps Helper Scripts**: Run `scripts/setup_devops.ps1` (Windows) or `scripts/setup_devops.sh` (Linux) to verify environment and Docker readiness.

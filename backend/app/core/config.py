@@ -13,6 +13,13 @@ class Settings:
     # Database URL via Environment Variables
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sql_app.db")
     
+    # Jira Issue Tracking Integration
+    JIRA_ENABLED: bool = os.getenv("JIRA_ENABLED", "false").lower() in ("true", "1", "yes")
+    JIRA_SERVER: str = os.getenv("JIRA_SERVER", "")
+    JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
+    JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "")
+    JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "AMB")
+    
     # CORS Origins via Environment Variables (comma-separated list)
     @property
     def cors_origins(self) -> List[str]:
