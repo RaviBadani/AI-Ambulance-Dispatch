@@ -45,3 +45,5 @@ The project includes an enterprise automated declarative [`Jenkinsfile`](./Jenki
 - **API Status & Testing**: Inspect status or test creation at `/api/v1/integrations/jira/status`.
 - **Environment Template**: See `backend/.env.example` for configuring `JIRA_SERVER`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
 - **DevOps Helper Scripts**: Run `scripts/setup_devops.ps1` (Windows) or `scripts/setup_devops.sh` (Linux) to verify environment and Docker readiness.
+
+<!-- Jira Project: KAN | Automated CI/CD Pipeline Active -->
