@@ -126,8 +126,8 @@ pipeline {
                 sh """
                     sleep 5
                     docker ps --filter "name=ambulance_"
-                    curl -f http://localhost:${BACKEND_PORT}/health || exit 1
-                    curl -f http://localhost:${FRONTEND_PORT}/ || exit 1
+                    docker exec ambulance_backend curl -f http://127.0.0.1:8000/health || exit 1
+                    docker exec ambulance_frontend wget -q -O - http://127.0.0.1:80/healthz || exit 1
                 """
             }
         }
